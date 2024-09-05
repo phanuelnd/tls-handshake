@@ -19,7 +19,6 @@ const cipherSuites = [
     { name: "DES-CBC3-SHA", value: 4 }, 
 ];
 
-// Function to get user input
 function getUserChoice(options, entity) {
     return new Promise((resolve) => {
         console.log(`\nSelect supported options for ${entity}:`);
@@ -39,23 +38,25 @@ function getUserChoice(options, entity) {
     });
 }
 
-// Function to negotiate TLS version
-function negotiateTLSVersion(clientVersion, serverVersion) {
-    return Math.min(clientVersion, serverVersion);
+function clientHello(clientTLSVersion, clientCipherSuite) {
+    console.log("\nClient Hello:");
+    console.log(`Supported TLS Version: TLS ${(clientTLSVersion / 10).toFixed(1)}`);
+    console.log(`Proposed Cipher Suite: ${cipherSuites.find(suite => suite.value === clientCipherSuite).name}`);
+    return { clientTLSVersion, clientCipherSuite };
 }
 
-// Function to select cipher suite
-function selectCipherSuite(clientSuite, serverSuite) {
-    if (clientSuite === serverSuite) {
-        return clientSuite;
-    } else {
-        return -1; // No common cipher suite
-    }
+function serverHello(serverTLSVersion, serverCipherSuite, clientHello) {
+    const negotiatedTLSVersion = Math.min(clientHello.clientTLSVersion, serverTLSVersion);
+    const selectedCipherSuite = clientHello.clientCipherSuite === serverCipherSuite ? serverCipherSuite : -1;
+
+    console.log("\nServer Hello:");
+    console.log(`Negotiated TLS Version: TLS ${(negotiatedTLSVersion / 10).toFixed(1)}`);
+    console.log(`Selected Cipher Suite: ${selectedCipherSuite > 0 ? cipherSuites.find(suite => suite.value === selectedCipherSuite).name : 'No common cipher suite'}`);
+
+    return { negotiatedTLSVersion, selectedCipherSuite };
 }
 
-// (Simplified) Diffie-Hellman key exchange
 function diffieHellmanKeyExchange() {
-    // This is a VERY simplified representation for demonstration purposes
     const clientSecret = 5; 
     const serverSecret = 7;
     const prime = 11;
@@ -69,28 +70,27 @@ function diffieHellmanKeyExchange() {
     return sharedSecret;
 }
 
-// Main execution
 async function main() {
     const clientTLSVersion = await getUserChoice(tlsVersions, "Client");
-    const serverTLSVersion = await getUserChoice(tlsVersions, "Server");
     const clientCipherSuite = await getUserChoice(cipherSuites, "Client");
+
+    const clientHelloMessage = clientHello(clientTLSVersion, clientCipherSuite);
+
+    const serverTLSVersion = await getUserChoice(tlsVersions, "Server");
     const serverCipherSuite = await getUserChoice(cipherSuites, "Server");
 
-    const negotiatedTLSVersion = negotiateTLSVersion(clientTLSVersion, serverTLSVersion);
-    const selectedCipherSuite = selectCipherSuite(clientCipherSuite, serverCipherSuite);
-    const sharedKey = diffieHellmanKeyExchange();
+    const serverHelloResponse = serverHello(serverTLSVersion, serverCipherSuite, clientHelloMessage);
 
-    if (negotiatedTLSVersion > 0 && selectedCipherSuite > 0) {
+    if (serverHelloResponse.negotiatedTLSVersion > 0 && serverHelloResponse.selectedCipherSuite > 0) {
+        const sharedKey = diffieHellmanKeyExchange();
         console.log("\nHandshake Successful!");
-        console.log("Negotiated TLS Version: TLS " + (negotiatedTLSVersion / 10).toFixed(1));
-        console.log("Selected Cipher Suite: " + cipherSuites[selectedCipherSuite - 1].name);
-        console.log("Shared Secret Key: " + sharedKey);
+        console.log(`Shared Secret Key: ${sharedKey}`);
     } else {
         console.log("\nHandshake Failed!");
-        if (negotiatedTLSVersion <= 0) {
+        if (serverHelloResponse.negotiatedTLSVersion <= 0) {
             console.log("Error: No common TLS version found.");
         }
-        if (selectedCipherSuite <= 0) {
+        if (serverHelloResponse.selectedCipherSuite <= 0) {
             console.log("Error: No common cipher suite found.");
         }
     }
@@ -98,5 +98,4 @@ async function main() {
     rl.close();
 }
 
-// Start the simulation
 main();
